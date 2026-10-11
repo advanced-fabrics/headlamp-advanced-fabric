@@ -1,16 +1,12 @@
 name: Validate
 on:
   pull_request:
-    paths:
-      - src/**
-      - docs/**
-      - package.json
-      - package-lock.json
-      - .github/workflows/validate.yaml
+  push:
+    branches: [main]
 permissions:
   contents: read
 jobs:
-  plugin:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,3 +17,15 @@ jobs:
       - run: npm run tsc
       - run: npm run build
       - run: npm run package
+  boundaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject credentials and cluster mutation clients
+        run: |
+          ! git grep -nE '(BEGIN (RSA |OPENSSH )?PRIVATE KEY|client-key-data|Bearer[[:space:]]+[A-Za-z0-9])' -- . ':!.github/workflows/validate.yaml'
+          ! git grep -nE 'ApiProxy\.(post|put|patch|delete)' -- src
+      - name: Verify public plugin metadata
+        run: |
+          test "$(node -p "require('./package.json').license")" = "Apache-2.0"
+          test "$(node -p "require('./package.json').name")" = "headlamp-advanced-fabric"
