@@ -1,7 +1,7 @@
 import { ApiProxy, registerRoute, registerSidebarEntry } from '@kinvolk/headlamp-plugin/lib';
 import { Alert, Box, CircularProgress, Typography } from '@mui/material';
 import React from 'react';
-import { serviceProxyBase } from './contract';
+import { requestObservation, serviceProxyBase } from './contract';
 import TradeoffObservatory, { ObservationClient } from './tradeoff';
 
 function useAdvancedFabrics() {
@@ -42,16 +42,16 @@ function Dashboard() {
   const client = React.useMemo<ObservationClient | null>(() => {
     if (!serviceRef || !supported) return null;
     const base = serviceProxyBase(serviceRef);
-    return async path => {
-      const response: any = await ApiProxy.request(`${base}${path}`, {
-        method: 'GET',
-        isJSON: false,
-      });
-      if (!response?.ok)
-        throw new Error(
-          `Advanced Fabric observation API returned HTTP ${response?.status || 'unavailable'}`
+    let pending = Promise.resolve<any>(undefined);
+    return path => {
+      const run = () =>
+        requestObservation(
+          observationPath =>
+            ApiProxy.request(`${base}${observationPath}`, { method: 'GET', isJSON: false }),
+          path
         );
-      return response.json();
+      pending = pending.catch(() => undefined).then(run);
+      return pending;
     };
   }, [serviceRef?.namespace, serviceRef?.name, serviceRef?.port, supported]);
 
