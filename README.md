@@ -10,6 +10,14 @@ derive structural coordinates, or provide fixed/demo/fallback observations.
 Missing producer data remains unavailable in the UI. Relationship polygons are
 drawn only when the producer supplies all three synchronized coordinates.
 
+The node view is split into separate `Relationship evolution`, `Measurements`
+and `Structural evidence` tabs. Relationship evolution accepts a two-ended time
+window of up to 30 days and requests at most 100 producer-selected samples. It
+uses a dashed start shape, a solid end shape and per-vertex trajectories instead
+of assigning an unrelated colour to every timestamp. The Measurements tab shows
+the complete producer-published measurement envelope, including unavailable and
+right-censored records; the UI does not synthesize missing values.
+
 ## Requirements
 
 - `networking.advfab.org/v1alpha1` `AdvancedFabric` CRD;
