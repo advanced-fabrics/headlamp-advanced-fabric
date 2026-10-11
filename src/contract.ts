@@ -17,10 +17,22 @@ export function completeSamples(vertices: string[], samples: TriangleSample[]) {
   );
 }
 
-export function relationshipSeriesPath(relationshipId: string, subject: string) {
-  return `/api/v1/relationships/${encodeURIComponent(
-    relationshipId
-  )}/series?subject=${encodeURIComponent(subject)}&maxPoints=7`;
+export const MAX_HISTORY_SECONDS = 30 * 24 * 60 * 60;
+
+export function relationshipSeriesPath(
+  relationshipId: string,
+  subject: string,
+  range?: { start: number; end: number; maxPoints?: number }
+) {
+  const query = new URLSearchParams({
+    subject,
+    maxPoints: String(range?.maxPoints || 100),
+  });
+  if (range) {
+    query.set('start', String(Math.floor(range.start)));
+    query.set('end', String(Math.floor(range.end)));
+  }
+  return `/api/v1/relationships/${encodeURIComponent(relationshipId)}/series?${query}`;
 }
 
 type ObservationResponse = {

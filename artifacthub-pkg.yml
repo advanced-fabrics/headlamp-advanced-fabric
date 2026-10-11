@@ -1,13 +1,13 @@
-version: 0.23.2
+version: 0.24.0
 name: advanced-fabric
 displayName: Advanced Fabric
-createdAt: "2026-09-12T02:47:53Z"
+createdAt: "2026-10-12T00:00:00Z"
 description: Render producer-owned Advanced Fabric snapshots, natural episodes, and synchronized multi-loop R/D/C relationship triangles through the discovered public observation API.
 license: Apache-2.0
 homeURL: https://github.com/advanced-fabrics/headlamp-advanced-fabric
 containersImages: []
 annotations:
-  headlamp/plugin/archive-url: https://github.com/advanced-fabrics/headlamp-advanced-fabric/releases/download/v0.23.2/headlamp-advanced-fabric-0.23.2.tar.gz
-  headlamp/plugin/archive-checksum: SHA256:247fb3f43b8f46b42f99181653d18e8b99cba887c8efa98aaaffae7161a53203
+  headlamp/plugin/archive-url: https://github.com/advanced-fabrics/headlamp-advanced-fabric/releases/download/v0.24.0/headlamp-advanced-fabric-0.24.0.tar.gz
+  headlamp/plugin/archive-checksum: SHA256:83d6f6bacd3cad424bf8cefc24e0a0e82b761b2e7f77247ac2d305f88975aeed
   headlamp/plugin/version-compat: ">=0.42.0"
   headlamp/plugin/distro-compat: in-cluster,web,docker-desktop,desktop

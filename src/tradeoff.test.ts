@@ -24,7 +24,16 @@ describe('public observation contract', () => {
 
   it('uses a stable producer-managed series window', () => {
     expect(relationshipSeriesPath('redundancy-independence-churn', 'r640')).toBe(
-      '/api/v1/relationships/redundancy-independence-churn/series?subject=r640&maxPoints=7'
+      '/api/v1/relationships/redundancy-independence-churn/series?subject=r640&maxPoints=100'
+    );
+    expect(
+      relationshipSeriesPath('redundancy-independence-churn', 'r640', {
+        start: 100.9,
+        end: 200.7,
+        maxPoints: 80,
+      })
+    ).toBe(
+      '/api/v1/relationships/redundancy-independence-churn/series?subject=r640&maxPoints=80&start=100&end=200'
     );
   });
 

@@ -7,16 +7,26 @@ import {
   InputLabel,
   MenuItem,
   Select,
+  Slider,
   Stack,
+  Tab,
+  Tabs,
   Typography,
   useTheme,
 } from '@mui/material';
 import React from 'react';
-import { completeSamples, relationshipSeriesPath, TriangleSample as Sample } from './contract';
+import {
+  completeSamples,
+  MAX_HISTORY_SECONDS,
+  relationshipSeriesPath,
+  TriangleSample as Sample,
+} from './contract';
 
 export type ObservationClient = (path: string) => Promise<any>;
 type Subject = { kind: string; name: string; observedAt?: string; state: string };
 type Relationship = { id: string; vertexLabel?: string; vertices: string[]; hypothesis?: string };
+type TabName = 'evolution' | 'measurements' | 'evidence';
+
 function useRequest(client: ObservationClient, path?: string) {
   const [state, setState] = React.useState<{ data?: any; error?: string }>({});
   React.useEffect(() => {
@@ -43,7 +53,30 @@ const POSITIONS = [
 ];
 const CENTER = { x: 60, y: 64.67 };
 
-function RelationshipTriangle({
+function samplePoints(vertices: string[], sample: Sample) {
+  return vertices.map((vertex, index) => {
+    const radius = 0.12 + Number(sample.coordinates[vertex]) * 0.84;
+    const target = POSITIONS[index];
+    return {
+      x: CENTER.x + (target.x - CENTER.x) * radius,
+      y: CENTER.y + (target.y - CENTER.y) * radius,
+    };
+  });
+}
+
+function formatTime(epochSeconds: number) {
+  return new Date(epochSeconds * 1000).toLocaleString();
+}
+
+function formatValue(value: any) {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(3);
+  if (typeof value === 'string') return value;
+  const text = JSON.stringify(value);
+  return text.length > 120 ? `${text.slice(0, 117)}…` : text;
+}
+
+function RelationshipEvolution({
   relationship,
   samples,
 }: {
@@ -52,31 +85,23 @@ function RelationshipTriangle({
 }) {
   const theme = useTheme();
   const vertices = relationship.vertices;
-  const colors = [
-    theme.palette.info.main,
-    theme.palette.secondary.main,
-    theme.palette.warning.main,
-    theme.palette.success.main,
-    theme.palette.error.main,
-    theme.palette.primary.light,
-    theme.palette.primary.dark,
-  ];
-  const complete = completeSamples(vertices, samples);
-  const points = (sample: Sample) =>
-    vertices
-      .map((vertex, index) => {
-        const radius = 0.12 + Number(sample.coordinates[vertex]) * 0.84;
-        const target = POSITIONS[index];
-        return `${CENTER.x + (target.x - CENTER.x) * radius},${
-          CENTER.y + (target.y - CENTER.y) * radius
-        }`;
-      })
+  const complete = completeSamples(vertices, samples).sort((a, b) => a.time - b.time);
+  const oldest = complete[0];
+  const newest = complete[complete.length - 1];
+  const polygon = (sample: Sample) =>
+    samplePoints(vertices, sample)
+      .map(point => `${point.x},${point.y}`)
       .join(' ');
+  const trajectories = vertices.map((vertex, vertexIndex) => ({
+    vertex,
+    points: complete.map(sample => samplePoints(vertices, sample)[vertexIndex]),
+  }));
+
   return (
     <Box
       sx={{
         display: 'grid',
-        gridTemplateColumns: { xs: '1fr', lg: 'minmax(520px,1.3fr) minmax(320px,.7fr)' },
+        gridTemplateColumns: { xs: '1fr', lg: 'minmax(520px,1.35fr) minmax(300px,.65fr)' },
         gap: 3,
       }}
     >
@@ -86,8 +111,21 @@ function RelationshipTriangle({
         height="520"
         style={{ maxHeight: 520, minHeight: 360 }}
         role="img"
-        aria-label={`${vertices.join(' ')} relationship triangle`}
+        aria-label={`${vertices.join(' ')} relationship evolution`}
       >
+        <defs>
+          <marker
+            id="trajectory-arrow"
+            viewBox="0 0 10 10"
+            refX="8"
+            refY="5"
+            markerWidth="4"
+            markerHeight="4"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" fill={theme.palette.primary.main} />
+          </marker>
+        </defs>
         <polygon
           points="60,10 12,92 108,92"
           fill="none"
@@ -109,24 +147,66 @@ function RelationshipTriangle({
             ).join(' ')}
           />
         ))}
-        {complete.map((sample, index) => (
+        {complete.slice(1, -1).map((sample, index) => (
           <polygon
             key={sample.time}
-            points={points(sample)}
-            fill={colors[index % colors.length]}
-            fillOpacity=".035"
-            stroke={colors[index % colors.length]}
-            strokeWidth={index === complete.length - 1 ? '1.25' : '.8'}
-            strokeLinejoin="round"
+            points={polygon(sample)}
+            fill="none"
+            stroke={theme.palette.primary.main}
+            strokeOpacity={0.1 + (index / Math.max(1, complete.length - 2)) * 0.18}
+            strokeWidth=".55"
+            strokeDasharray="1.4 1.4"
           />
         ))}
+        {oldest && (
+          <polygon
+            points={polygon(oldest)}
+            fill="none"
+            stroke={theme.palette.text.secondary}
+            strokeWidth="1"
+            strokeDasharray="3 2"
+          />
+        )}
+        {trajectories.map(
+          ({ vertex, points }) =>
+            points.length > 1 && (
+              <polyline
+                key={vertex}
+                points={points.map(point => `${point.x},${point.y}`).join(' ')}
+                fill="none"
+                stroke={theme.palette.primary.main}
+                strokeOpacity=".65"
+                strokeWidth=".8"
+                markerEnd="url(#trajectory-arrow)"
+              />
+            )
+        )}
+        {newest && (
+          <polygon
+            points={polygon(newest)}
+            fill={theme.palette.primary.main}
+            fillOpacity=".08"
+            stroke={theme.palette.primary.main}
+            strokeWidth="1.7"
+          />
+        )}
+        {newest &&
+          samplePoints(vertices, newest).map((point, index) => (
+            <circle
+              key={vertices[index]}
+              cx={point.x}
+              cy={point.y}
+              r="1.3"
+              fill={theme.palette.primary.main}
+            />
+          ))}
         {vertices.map((vertex, index) => (
           <g key={vertex}>
             <circle
               cx={POSITIONS[index].x}
               cy={POSITIONS[index].y}
               r="2.6"
-              fill={theme.palette.primary.main}
+              fill={theme.palette.text.primary}
             />
             <text
               x={POSITIONS[index].x}
@@ -141,35 +221,86 @@ function RelationshipTriangle({
           </g>
         ))}
       </svg>
-      <Stack gap={1.5} justifyContent="center">
-        <Typography variant="h5">{relationship.vertexLabel || vertices.join('–')}</Typography>
-        <Typography color="text.secondary">
-          {relationship.hypothesis || 'Observed structural relationship.'}
-        </Typography>
+      <Stack gap={2} justifyContent="center">
+        <Box>
+          <Typography variant="h5">{relationship.vertexLabel || vertices.join('–')}</Typography>
+          <Typography color="text.secondary">
+            {relationship.hypothesis || 'Observed structural relationship.'}
+          </Typography>
+        </Box>
         <Alert severity="info">
-          Each coloured closed triangle is one producer-synchronized time slice. The UI renders
-          supplied coordinates without calculating or replacing them.
+          虚线是窗口起点，实线填充是窗口终点；浅色虚线为中间闭曲线，箭头显示每个顶点随时间的移动方向。
         </Alert>
         {!complete.length && (
           <Alert severity="warning">
-            No time slice has all three coordinates. Missing values remain unavailable and are not
-            rendered as zero.
+            所选窗口内没有三个坐标均完整的同步样本；缺失值不会被当成零。
           </Alert>
         )}
-        {complete.map((sample, index) => (
-          <Stack key={sample.time} direction="row" alignItems="center" gap={1}>
-            <Box sx={{ width: 18, borderTop: 3, borderColor: colors[index % colors.length] }} />
-            <Typography variant="caption">
-              {new Date(sample.time * 1000).toLocaleString()} ·{' '}
-              {vertices
-                .map(
-                  vertex => `${vertex} ${(Number(sample.coordinates[vertex]) * 100).toFixed(1)}%`
-                )
-                .join(' · ')}
+        {oldest && newest && (
+          <Stack gap={1}>
+            <Typography variant="subtitle2">窗口变化</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {formatTime(oldest.time)} → {formatTime(newest.time)} · {complete.length} 个完整样本
             </Typography>
+            {vertices.map(vertex => {
+              const start = Number(oldest.coordinates[vertex]);
+              const end = Number(newest.coordinates[vertex]);
+              const delta = (end - start) * 100;
+              return (
+                <Typography key={vertex} variant="body2">
+                  {vertex}: {(start * 100).toFixed(1)}% → {(end * 100).toFixed(1)}%{' '}
+                  <Box
+                    component="span"
+                    sx={{
+                      color:
+                        delta > 0 ? 'success.main' : delta < 0 ? 'warning.main' : 'text.secondary',
+                    }}
+                  >
+                    ({delta > 0 ? '+' : ''}
+                    {delta.toFixed(1)} pp)
+                  </Box>
+                </Typography>
+              );
+            })}
           </Stack>
-        ))}
+        )}
       </Stack>
+    </Box>
+  );
+}
+
+function RangeSelector({
+  value,
+  bounds,
+  onCommit,
+}: {
+  value: [number, number];
+  bounds: [number, number];
+  onCommit: (value: [number, number]) => void;
+}) {
+  const [draft, setDraft] = React.useState<[number, number]>(value);
+  React.useEffect(() => setDraft(value), [value[0], value[1]]);
+  return (
+    <Box sx={{ px: 1, pt: 1, minWidth: { md: 420 }, flex: 1 }}>
+      <Stack direction="row" justifyContent="space-between" gap={2}>
+        <Typography variant="caption">{formatTime(draft[0])}</Typography>
+        <Typography variant="caption">{formatTime(draft[1])}</Typography>
+      </Stack>
+      <Slider
+        value={draft}
+        min={bounds[0]}
+        max={bounds[1]}
+        step={900}
+        disableSwap
+        valueLabelDisplay="auto"
+        valueLabelFormat={formatTime}
+        onChange={(_, next) => setDraft(next as [number, number])}
+        onChangeCommitted={(_, next) => onCommit(next as [number, number])}
+        aria-label="Observation time range"
+      />
+      <Typography variant="caption" color="text.secondary">
+        拖动两个端点选择数据期限；最长回看 30 天，松开端点后才重新查询。
+      </Typography>
     </Box>
   );
 }
@@ -181,8 +312,15 @@ export default function TradeoffObservatory({
   client: ObservationClient;
   capabilities: string[];
 }) {
+  const now = React.useMemo(() => Math.floor(Date.now() / 1000), []);
+  const bounds = React.useMemo<[number, number]>(() => [now - MAX_HISTORY_SECONDS, now], [now]);
+  const [range, setRange] = React.useState<[number, number]>(bounds);
+  const [tab, setTab] = React.useState<TabName>('evolution');
   const subjectsState = useRequest(client, '/api/v1/subjects');
-  const relationshipsState = useRequest(client, '/api/v1/relationships');
+  const relationshipsState = useRequest(
+    client,
+    tab === 'evolution' ? '/api/v1/relationships' : undefined
+  );
   const subjects: Subject[] = subjectsState.data?.items || [];
   const relationships: Relationship[] = relationshipsState.data?.items || [];
   const [selectedSubject, setSelectedSubject] = React.useState('');
@@ -195,25 +333,44 @@ export default function TradeoffObservatory({
     : relationships[0]?.id || '';
   const relationship = relationships.find(item => item.id === relationshipId);
   const seriesPath =
-    relationshipId && subject ? relationshipSeriesPath(relationshipId, subject) : undefined;
+    tab === 'evolution' && relationshipId && subject
+      ? relationshipSeriesPath(relationshipId, subject, {
+          start: range[0],
+          end: range[1],
+          maxPoints: 100,
+        })
+      : undefined;
   const seriesState = useRequest(client, seriesPath);
   const snapshotState = useRequest(
     client,
-    subject ? `/api/v1/subjects/Node/${encodeURIComponent(subject)}/snapshot` : undefined
+    tab !== 'evolution' && subject
+      ? `/api/v1/subjects/Node/${encodeURIComponent(subject)}/snapshot`
+      : undefined
   );
+  const snapshot = snapshotState.data;
   const errors = [
     subjectsState.error,
     relationshipsState.error,
     seriesState.error,
     snapshotState.error,
   ].filter(Boolean) as string[];
-  const snapshot = snapshotState.data;
-  const measurementRows = Object.entries(snapshot?.latent || {}).map(([name, value]: any) => ({
+  const measurementRows = (snapshot?.measurement?.measurements || []).map((item: any) => ({
+    symbol: item.symbol,
+    state: item.state || item.observationStatus || '—',
+    value: formatValue(item.value),
+    unit: item.unit || snapshot?.measurement?.trackingValues?.[item.symbol]?.unit || '—',
+    observedAt: item.observedAt ? new Date(item.observedAt).toLocaleString() : '—',
+    source: item.source || '—',
+    note: item.missingEvidence || item.note || '—',
+  }));
+  const evidenceRows = Object.entries(snapshot?.latent || {}).map(([name, value]: any) => ({
     name,
     state: value.state,
+    required: (value.requiredSymbols || []).join(', ') || '—',
     available: (value.availableSymbols || []).join(', ') || '—',
     missing: (value.missingSymbols || []).join(', ') || '—',
   }));
+
   return (
     <Box>
       {errors.map(error => (
@@ -221,8 +378,13 @@ export default function TradeoffObservatory({
           {error}
         </Alert>
       ))}
-      <Stack direction={{ xs: 'column', md: 'row' }} gap={2} sx={{ my: 2 }}>
-        <FormControl size="small" sx={{ minWidth: 260 }}>
+      <Stack
+        direction={{ xs: 'column', md: 'row' }}
+        alignItems={{ md: 'center' }}
+        gap={2}
+        sx={{ my: 2 }}
+      >
+        <FormControl size="small" sx={{ minWidth: 240 }}>
           <InputLabel id="subject">Node</InputLabel>
           <Select
             labelId="subject"
@@ -233,21 +395,6 @@ export default function TradeoffObservatory({
             {subjects.map(item => (
               <MenuItem key={item.name} value={item.name}>
                 {item.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <FormControl size="small" sx={{ minWidth: 280 }}>
-          <InputLabel id="relationship">Relationship</InputLabel>
-          <Select
-            labelId="relationship"
-            label="Relationship"
-            value={relationshipId}
-            onChange={event => setSelectedRelationship(event.target.value)}
-          >
-            {relationships.map(item => (
-              <MenuItem key={item.id} value={item.id}>
-                {item.vertexLabel || item.vertices.join('–')}
               </MenuItem>
             ))}
           </Select>
@@ -264,34 +411,89 @@ export default function TradeoffObservatory({
         )}
         <Chip variant="outlined" label={`API capabilities: ${capabilities.length}`} />
       </Stack>
+      <Tabs
+        value={tab}
+        onChange={(_, value) => setTab(value)}
+        sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
+      >
+        <Tab value="evolution" label="Relationship evolution" />
+        <Tab value="measurements" label="Measurements" />
+        <Tab value="evidence" label="Structural evidence" />
+      </Tabs>
       {!subjects.length && !subjectsState.error && (
         <Alert severity="warning">The Advanced Fabric API reports no observable subjects.</Alert>
       )}
-      {!relationships.length && !relationshipsState.error && (
-        <Alert severity="warning">
-          The Advanced Fabric API reports no relationship definitions.
-        </Alert>
+      {tab === 'evolution' && (
+        <>
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            alignItems={{ md: 'center' }}
+            gap={3}
+            sx={{ mb: 2 }}
+          >
+            <FormControl size="small" sx={{ minWidth: 280 }}>
+              <InputLabel id="relationship">Relationship</InputLabel>
+              <Select
+                labelId="relationship"
+                label="Relationship"
+                value={relationshipId}
+                onChange={event => setSelectedRelationship(event.target.value)}
+              >
+                {relationships.map(item => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {item.vertexLabel || item.vertices.join('–')}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <RangeSelector value={range} bounds={bounds} onCommit={setRange} />
+          </Stack>
+          {!relationships.length && !relationshipsState.error && (
+            <Alert severity="warning">
+              The Advanced Fabric API reports no relationship definitions.
+            </Alert>
+          )}
+          {relationship && (
+            <SectionBox
+              title={`${
+                relationship.vertexLabel || relationship.vertices.join('–')
+              } relationship evolution`}
+            >
+              <RelationshipEvolution
+                relationship={relationship}
+                samples={seriesState.data?.samples || []}
+              />
+            </SectionBox>
+          )}
+        </>
       )}
-      {relationship && (
-        <SectionBox
-          title={`${
-            relationship.vertexLabel || relationship.vertices.join('–')
-          } relationship triangle`}
-        >
-          <RelationshipTriangle
-            relationship={relationship}
-            samples={seriesState.data?.samples || []}
-          />
-        </SectionBox>
-      )}
-      {snapshot && (
-        <SectionBox title={`${subject} structural evidence`}>
+      {tab === 'measurements' && snapshot && (
+        <SectionBox title={`${subject} measurements (${measurementRows.length})`}>
           <Table
             data={measurementRows}
             columns={
               [
+                { header: 'Symbol', accessorKey: 'symbol' },
+                { header: 'State', accessorKey: 'state' },
+                { header: 'Value', accessorKey: 'value' },
+                { header: 'Unit', accessorKey: 'unit' },
+                { header: 'Observed at', accessorKey: 'observedAt' },
+                { header: 'Source', accessorKey: 'source' },
+                { header: 'Missing evidence / note', accessorKey: 'note' },
+              ] as any
+            }
+          />
+        </SectionBox>
+      )}
+      {tab === 'evidence' && snapshot && (
+        <SectionBox title={`${subject} structural evidence`}>
+          <Table
+            data={evidenceRows}
+            columns={
+              [
                 { header: 'Quantity', accessorKey: 'name' },
                 { header: 'Evidence state', accessorKey: 'state' },
+                { header: 'Required measurements', accessorKey: 'required' },
                 { header: 'Available measurements', accessorKey: 'available' },
                 { header: 'Missing measurements', accessorKey: 'missing' },
               ] as any
