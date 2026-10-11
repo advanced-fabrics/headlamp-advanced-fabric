@@ -17,11 +17,15 @@ import { completeSamples, relationshipSeriesPath, TriangleSample as Sample } fro
 export type ObservationClient = (path: string) => Promise<any>;
 type Subject = { kind: string; name: string; observedAt?: string; state: string };
 type Relationship = { id: string; vertexLabel?: string; vertices: string[]; hypothesis?: string };
-function useRequest(client: ObservationClient, path: string) {
+function useRequest(client: ObservationClient, path?: string) {
   const [state, setState] = React.useState<{ data?: any; error?: string }>({});
   React.useEffect(() => {
     let active = true;
     setState({});
+    if (!path)
+      return () => {
+        active = false;
+      };
     client(path)
       .then(data => active && setState({ data }))
       .catch(error => active && setState({ error: String(error) }));
@@ -191,13 +195,11 @@ export default function TradeoffObservatory({
     : relationships[0]?.id || '';
   const relationship = relationships.find(item => item.id === relationshipId);
   const seriesPath =
-    relationshipId && subject
-      ? relationshipSeriesPath(relationshipId, subject)
-      : '/api/v1/relationships';
+    relationshipId && subject ? relationshipSeriesPath(relationshipId, subject) : undefined;
   const seriesState = useRequest(client, seriesPath);
   const snapshotState = useRequest(
     client,
-    subject ? `/api/v1/subjects/Node/${encodeURIComponent(subject)}/snapshot` : '/api/v1/subjects'
+    subject ? `/api/v1/subjects/Node/${encodeURIComponent(subject)}/snapshot` : undefined
   );
   const errors = [
     subjectsState.error,

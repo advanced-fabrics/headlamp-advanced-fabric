@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { completeSamples, relationshipSeriesPath, serviceProxyBase } from './contract';
+import {
+  completeSamples,
+  relationshipSeriesPath,
+  requestObservation,
+  serviceProxyBase,
+} from './contract';
 
 describe('public observation contract', () => {
   it('discovers the API only through the advertised service reference', () => {
@@ -21,5 +26,35 @@ describe('public observation contract', () => {
     expect(relationshipSeriesPath('redundancy-independence-churn', 'r640')).toBe(
       '/api/v1/relationships/redundancy-independence-churn/series?subject=r640&maxPoints=7'
     );
+  });
+
+  it('retries direct and wrapped rate limits before surfacing an error', async () => {
+    const responses = [
+      {
+        ok: false,
+        status: 503,
+        json: async () => ({
+          error: 'observation data unavailable',
+          detail: 'HTTP Error 429: Too Many Requests',
+        }),
+      },
+      {
+        ok: false,
+        status: 429,
+        headers: { get: () => '0' },
+        json: async () => ({ error: 'limited' }),
+      },
+      { ok: true, status: 200, json: async () => ({ items: ['ready'] }) },
+    ];
+    const sleeps: number[] = [];
+    const result = await requestObservation(
+      async () => responses.shift() as any,
+      '/api/v1/subjects',
+      async milliseconds => {
+        sleeps.push(milliseconds);
+      }
+    );
+    expect(result).toEqual({ items: ['ready'] });
+    expect(sleeps).toEqual([1000, 0]);
   });
 });
