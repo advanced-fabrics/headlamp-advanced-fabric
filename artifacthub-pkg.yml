@@ -1,4 +1,4 @@
-version: 0.25.0
+version: 0.26.0
 name: advanced-fabric
 displayName: Advanced Fabric
 createdAt: "2026-10-12T00:00:00Z"
@@ -7,7 +7,7 @@ license: Apache-2.0
 homeURL: https://github.com/advanced-fabrics/headlamp-advanced-fabric
 containersImages: []
 annotations:
-  headlamp/plugin/archive-url: https://github.com/advanced-fabrics/headlamp-advanced-fabric/releases/download/v0.25.0/headlamp-advanced-fabric-0.25.0.tar.gz
-  headlamp/plugin/archive-checksum: SHA256:3f449998fdcecbb0e7409e73b0f1fbff8362915b62f84e377d6776b0c60b3728
+  headlamp/plugin/archive-url: https://github.com/advanced-fabrics/headlamp-advanced-fabric/releases/download/v0.26.0/headlamp-advanced-fabric-0.26.0.tar.gz
+  headlamp/plugin/archive-checksum: SHA256:e6c9f7620330252913a21b3c9b5c3f1cb782694fdf709411ba028972779bb3d2
   headlamp/plugin/version-compat: ">=0.42.0"
   headlamp/plugin/distro-compat: in-cluster,web,docker-desktop,desktop

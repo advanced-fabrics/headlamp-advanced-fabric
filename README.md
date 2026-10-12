@@ -13,10 +13,11 @@ drawn only when the producer supplies all three synchronized coordinates.
 The node view is split into separate `Relationship evolution`, `Measurements`,
 `DNS / DoH`, `Path probes`, `All agent data`, and `Structural evidence` tabs.
 The canonical R-D-C frame remains visible while relationship discovery is temporarily
-unavailable. Relationship evolution accepts a two-ended time
-window of up to 30 days and requests at most 100 producer-selected samples. It
-uses a dashed start shape, a solid end shape and per-vertex trajectories instead
-of assigning an unrelated colour to every timestamp. The Measurements tab shows
+unavailable. Relationship evolution uses one dual-thumb time window of up to 30
+days and requests at most 100 producer-selected samples. Redundancy, Diversity,
+and Churn use red, green, and blue triangle edges. Historical shapes remain
+subdued, while a draggable triangular time cursor synchronizes the highlighted
+shape with the three value curves. The Measurements tab shows
 the complete producer-published measurement envelope, including unavailable and
 right-censored records. DNS, DoH and path-probe records are rendered without
 field truncation, and the complete agent payload is available as flattened field

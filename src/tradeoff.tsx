@@ -7,6 +7,7 @@ import {
   InputLabel,
   MenuItem,
   Select,
+  Slider,
   Stack,
   Tab,
   Tabs,
@@ -58,6 +59,12 @@ const POSITIONS = [
   { x: 108, y: 92 },
 ];
 const CENTER = { x: 60, y: 64.67 };
+const VERTEX_COLORS = ['#ef4444', '#22c55e', '#3b82f6'];
+const VERTEX_NAMES: Record<string, string> = {
+  R: 'Redundancy',
+  D: 'Diversity',
+  C: 'Churn',
+};
 
 function samplePoints(vertices: string[], sample: Sample) {
   return vertices.map((vertex, index) => {
@@ -102,16 +109,22 @@ function RelationshipEvolution({
   const theme = useTheme();
   const vertices = relationship.vertices;
   const complete = completeSamples(vertices, samples).sort((a, b) => a.time - b.time);
+  const [selectedIndex, setSelectedIndex] = React.useState(Math.max(0, complete.length - 1));
+  React.useEffect(() => setSelectedIndex(Math.max(0, complete.length - 1)), [complete.length]);
   const oldest = complete[0];
   const newest = complete[complete.length - 1];
-  const polygon = (sample: Sample) =>
-    samplePoints(vertices, sample)
-      .map(point => `${point.x},${point.y}`)
-      .join(' ');
-  const trajectories = vertices.map((vertex, vertexIndex) => ({
-    vertex,
-    points: complete.map(sample => samplePoints(vertices, sample)[vertexIndex]),
-  }));
+  const selected = complete[selectedIndex];
+  const linePath = (sample: Sample, side: number) => {
+    const points = samplePoints(vertices, sample);
+    const start = points[side];
+    const end = points[(side + 1) % points.length];
+    return `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
+  };
+  const curveWidth = 760;
+  const curveHeight = 126;
+  const curveX = (index: number) =>
+    complete.length <= 1 ? 20 : 20 + (index / (complete.length - 1)) * (curveWidth - 40);
+  const curveY = (value: number) => 10 + (1 - value) * (curveHeight - 30);
 
   return (
     <Box
@@ -129,19 +142,6 @@ function RelationshipEvolution({
         role="img"
         aria-label={`${vertices.join(' ')} relationship evolution`}
       >
-        <defs>
-          <marker
-            id="trajectory-arrow"
-            viewBox="0 0 10 10"
-            refX="8"
-            refY="5"
-            markerWidth="4"
-            markerHeight="4"
-            orient="auto-start-reverse"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill={theme.palette.primary.main} />
-          </marker>
-        </defs>
         <polygon
           points="60,10 12,92 108,92"
           fill="none"
@@ -149,71 +149,34 @@ function RelationshipEvolution({
           strokeOpacity=".55"
           strokeWidth="1.2"
         />
-        {[0.25, 0.5, 0.75].map(radius => (
-          <polygon
-            key={radius}
-            fill="none"
-            stroke={theme.palette.divider}
-            strokeWidth=".45"
-            points={POSITIONS.map(
-              target =>
-                `${CENTER.x + (target.x - CENTER.x) * radius},${
-                  CENTER.y + (target.y - CENTER.y) * radius
-                }`
-            ).join(' ')}
-          />
-        ))}
-        {complete.slice(1, -1).map((sample, index) => (
-          <polygon
-            key={sample.time}
-            points={polygon(sample)}
-            fill="none"
-            stroke={theme.palette.primary.main}
-            strokeOpacity={0.1 + (index / Math.max(1, complete.length - 2)) * 0.18}
-            strokeWidth=".55"
-            strokeDasharray="1.4 1.4"
-          />
-        ))}
-        {oldest && (
-          <polygon
-            points={polygon(oldest)}
-            fill="none"
-            stroke={theme.palette.text.secondary}
-            strokeWidth="1"
-            strokeDasharray="3 2"
-          />
-        )}
-        {trajectories.map(
-          ({ vertex, points }) =>
-            points.length > 1 && (
-              <polyline
-                key={vertex}
-                points={points.map(point => `${point.x},${point.y}`).join(' ')}
-                fill="none"
-                stroke={theme.palette.primary.main}
-                strokeOpacity=".65"
-                strokeWidth=".8"
-                markerEnd="url(#trajectory-arrow)"
-              />
-            )
-        )}
-        {newest && (
-          <polygon
-            points={polygon(newest)}
-            fill={theme.palette.primary.main}
-            fillOpacity=".08"
-            stroke={theme.palette.primary.main}
-            strokeWidth="1.7"
-          />
-        )}
-        {newest &&
-          samplePoints(vertices, newest).map((point, index) => (
+        {complete.map((sample, sampleIndex) => {
+          const isSelected = sampleIndex === selectedIndex;
+          const opacity = isSelected ? 0.6 : 0.08 + (sampleIndex / Math.max(1, complete.length - 1)) * 0.16;
+          return (
+            <g key={sample.time}>
+              {vertices.map((_, side) => (
+                <path
+                  key={side}
+                  d={linePath(sample, side)}
+                  fill="none"
+                  stroke={VERTEX_COLORS[side]}
+                  strokeOpacity={opacity}
+                  strokeWidth={isSelected ? 1.8 : 0.55}
+                  strokeDasharray={isSelected ? undefined : '1.2 1.5'}
+                />
+              ))}
+            </g>
+          );
+        })}
+        {selected &&
+          samplePoints(vertices, selected).map((point, index) => (
             <circle
               key={vertices[index]}
               cx={point.x}
               cy={point.y}
               r="1.3"
-              fill={theme.palette.primary.main}
+              fill={VERTEX_COLORS[index]}
+              fillOpacity=".6"
             />
           ))}
         {vertices.map((vertex, index) => (
@@ -222,7 +185,7 @@ function RelationshipEvolution({
               cx={POSITIONS[index].x}
               cy={POSITIONS[index].y}
               r="2.6"
-              fill={theme.palette.text.primary}
+              fill={VERTEX_COLORS[index]}
             />
             <text
               x={POSITIONS[index].x}
@@ -232,7 +195,7 @@ function RelationshipEvolution({
               fontWeight="700"
               fill={theme.palette.text.primary}
             >
-              {vertex}
+              {VERTEX_NAMES[vertex] || vertex}
             </text>
           </g>
         ))}
@@ -245,18 +208,19 @@ function RelationshipEvolution({
           </Typography>
         </Box>
         <Alert severity="info">
-          虚线是窗口起点，实线填充是窗口终点；浅色虚线为中间闭曲线，箭头显示每个顶点随时间的移动方向。
+          Redundancy、Diversity、Churn 分别使用红、绿、蓝编码；浅色闭线表示历史，60% 不透明度的实线表示当前游标样本。
         </Alert>
         {!complete.length && (
           <Alert severity="warning">
             所选窗口内没有三个坐标均完整的同步样本；缺失值不会被当成零。
           </Alert>
         )}
-        {oldest && newest && (
+        {oldest && newest && selected && (
           <Stack gap={1}>
             <Typography variant="subtitle2">窗口变化</Typography>
             <Typography variant="caption" color="text.secondary">
               {formatTime(oldest.time)} → {formatTime(newest.time)} · {complete.length} 个完整样本
+              <br />当前高亮：{formatTime(selected.time)}
             </Typography>
             {vertices.map(vertex => {
               const start = Number(oldest.coordinates[vertex]);
@@ -264,7 +228,8 @@ function RelationshipEvolution({
               const delta = (end - start) * 100;
               return (
                 <Typography key={vertex} variant="body2">
-                  {vertex}: {(start * 100).toFixed(1)}% → {(end * 100).toFixed(1)}%{' '}
+                  {VERTEX_NAMES[vertex] || vertex}: {(start * 100).toFixed(1)}% →{' '}
+                  {(end * 100).toFixed(1)}%{' '}
                   <Box
                     component="span"
                     sx={{
@@ -281,6 +246,85 @@ function RelationshipEvolution({
           </Stack>
         )}
       </Stack>
+      {!!complete.length && (
+        <Box sx={{ gridColumn: '1 / -1', px: 1 }}>
+          <Typography variant="subtitle2">时间范围内的 RDC 演变</Typography>
+          <Box sx={{ position: 'relative', mt: 1 }}>
+            <svg
+              viewBox={`0 0 ${curveWidth} ${curveHeight}`}
+              width="100%"
+              height="150"
+              role="img"
+              aria-label="Redundancy Diversity Churn time curves"
+            >
+              {[0, 0.5, 1].map(value => (
+                <line
+                  key={value}
+                  x1="20"
+                  x2={curveWidth - 20}
+                  y1={curveY(value)}
+                  y2={curveY(value)}
+                  stroke={theme.palette.divider}
+                  strokeWidth="1"
+                />
+              ))}
+              {vertices.map((vertex, vertexIndex) => (
+                <polyline
+                  key={vertex}
+                  points={complete
+                    .map((sample, index) =>
+                      `${curveX(index)},${curveY(Number(sample.coordinates[vertex]))}`
+                    )
+                    .join(' ')}
+                  fill="none"
+                  stroke={VERTEX_COLORS[vertexIndex]}
+                  strokeWidth="2"
+                  strokeOpacity=".8"
+                />
+              ))}
+              <line
+                x1={curveX(selectedIndex)}
+                x2={curveX(selectedIndex)}
+                y1="6"
+                y2={curveHeight - 16}
+                stroke={theme.palette.text.primary}
+                strokeOpacity=".55"
+                strokeWidth="1"
+              />
+              <path
+                d={`M ${curveX(selectedIndex) - 7} 2 L ${curveX(selectedIndex) + 7} 2 L ${curveX(selectedIndex)} 14 Z`}
+                fill={theme.palette.text.primary}
+              />
+            </svg>
+            <Slider
+              aria-label="Highlighted observation time"
+              min={0}
+              max={Math.max(0, complete.length - 1)}
+              step={1}
+              value={selectedIndex}
+              onChange={(_, value) => setSelectedIndex(value as number)}
+              valueLabelDisplay="auto"
+              valueLabelFormat={index => formatTime(complete[Number(index)]?.time || 0)}
+              sx={{
+                mt: -3,
+                '& .MuiSlider-thumb': {
+                  width: 18,
+                  height: 16,
+                  borderRadius: 0,
+                  clipPath: 'polygon(50% 0, 100% 100%, 0 100%)',
+                },
+              }}
+            />
+          </Box>
+          <Stack direction="row" gap={2} flexWrap="wrap">
+            {vertices.map((vertex, index) => (
+              <Typography key={vertex} variant="caption" sx={{ color: VERTEX_COLORS[index] }}>
+                ● {VERTEX_NAMES[vertex] || vertex}
+              </Typography>
+            ))}
+          </Stack>
+        </Box>
+      )}
     </Box>
   );
 }
@@ -296,58 +340,25 @@ function RangeSelector({
 }) {
   const [draft, setDraft] = React.useState<[number, number]>(value);
   React.useEffect(() => setDraft(value), [value[0], value[1]]);
-  const updateDraft = (endpoint: 0 | 1, rawValue: string) => {
-    const nextValue = Number(rawValue);
-    setDraft(current =>
-      endpoint === 0
-        ? [Math.min(nextValue, current[1]), current[1]]
-        : [current[0], Math.max(nextValue, current[0])]
-    );
-  };
   return (
     <Box sx={{ px: 1, pt: 1, minWidth: { md: 420 }, flex: 1 }}>
       <Stack direction="row" justifyContent="space-between" gap={2}>
         <Typography variant="caption">{formatTime(draft[0])}</Typography>
         <Typography variant="caption">{formatTime(draft[1])}</Typography>
       </Stack>
-      <Stack gap={0.5} sx={{ my: 1 }}>
-        <Typography component="label" variant="caption">
-          起点
-          <Box
-            component="input"
-            type="range"
-            aria-label="Observation start time"
-            value={draft[0]}
-            min={bounds[0]}
-            max={draft[1]}
-            step={900}
-            onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-              updateDraft(0, event.target.value)
-            }
-            onPointerUp={() => onCommit(draft)}
-            onKeyUp={() => onCommit(draft)}
-            sx={{ display: 'block', width: '100%', accentColor: 'primary.main' }}
-          />
-        </Typography>
-        <Typography component="label" variant="caption">
-          终点
-          <Box
-            component="input"
-            type="range"
-            aria-label="Observation end time"
-            value={draft[1]}
-            min={draft[0]}
-            max={bounds[1]}
-            step={900}
-            onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-              updateDraft(1, event.target.value)
-            }
-            onPointerUp={() => onCommit(draft)}
-            onKeyUp={() => onCommit(draft)}
-            sx={{ display: 'block', width: '100%', accentColor: 'primary.main' }}
-          />
-        </Typography>
-      </Stack>
+      <Slider
+        aria-label="Observation time range"
+        value={draft}
+        min={bounds[0]}
+        max={bounds[1]}
+        step={900}
+        disableSwap
+        onChange={(_, value) => setDraft(value as [number, number])}
+        onChangeCommitted={(_, value) => onCommit(value as [number, number])}
+        valueLabelDisplay="auto"
+        valueLabelFormat={value => formatTime(value)}
+        sx={{ my: 1.5 }}
+      />
       <Typography variant="caption" color="text.secondary">
         拖动两个端点选择数据期限；最长回看 30 天，松开端点后才重新查询。
       </Typography>
