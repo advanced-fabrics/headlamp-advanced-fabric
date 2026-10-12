@@ -7,7 +7,6 @@ import {
   InputLabel,
   MenuItem,
   Select,
-  Slider,
   Stack,
   Tab,
   Tabs,
@@ -280,24 +279,58 @@ function RangeSelector({
 }) {
   const [draft, setDraft] = React.useState<[number, number]>(value);
   React.useEffect(() => setDraft(value), [value[0], value[1]]);
+  const updateDraft = (endpoint: 0 | 1, rawValue: string) => {
+    const nextValue = Number(rawValue);
+    setDraft(current =>
+      endpoint === 0
+        ? [Math.min(nextValue, current[1]), current[1]]
+        : [current[0], Math.max(nextValue, current[0])]
+    );
+  };
   return (
     <Box sx={{ px: 1, pt: 1, minWidth: { md: 420 }, flex: 1 }}>
       <Stack direction="row" justifyContent="space-between" gap={2}>
         <Typography variant="caption">{formatTime(draft[0])}</Typography>
         <Typography variant="caption">{formatTime(draft[1])}</Typography>
       </Stack>
-      <Slider
-        value={draft}
-        min={bounds[0]}
-        max={bounds[1]}
-        step={900}
-        disableSwap
-        valueLabelDisplay="auto"
-        valueLabelFormat={formatTime}
-        onChange={(_, next) => setDraft(next as [number, number])}
-        onChangeCommitted={(_, next) => onCommit(next as [number, number])}
-        aria-label="Observation time range"
-      />
+      <Stack gap={0.5} sx={{ my: 1 }}>
+        <Typography component="label" variant="caption">
+          起点
+          <Box
+            component="input"
+            type="range"
+            aria-label="Observation start time"
+            value={draft[0]}
+            min={bounds[0]}
+            max={draft[1]}
+            step={900}
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+              updateDraft(0, event.target.value)
+            }
+            onPointerUp={() => onCommit(draft)}
+            onKeyUp={() => onCommit(draft)}
+            sx={{ display: 'block', width: '100%', accentColor: 'primary.main' }}
+          />
+        </Typography>
+        <Typography component="label" variant="caption">
+          终点
+          <Box
+            component="input"
+            type="range"
+            aria-label="Observation end time"
+            value={draft[1]}
+            min={draft[0]}
+            max={bounds[1]}
+            step={900}
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+              updateDraft(1, event.target.value)
+            }
+            onPointerUp={() => onCommit(draft)}
+            onKeyUp={() => onCommit(draft)}
+            sx={{ display: 'block', width: '100%', accentColor: 'primary.main' }}
+          />
+        </Typography>
+      </Stack>
       <Typography variant="caption" color="text.secondary">
         拖动两个端点选择数据期限；最长回看 30 天，松开端点后才重新查询。
       </Typography>
