@@ -24,7 +24,14 @@ import {
 export type ObservationClient = (path: string) => Promise<any>;
 type Subject = { kind: string; name: string; observedAt?: string; state: string };
 type Relationship = { id: string; vertexLabel?: string; vertices: string[]; hypothesis?: string };
-type TabName = 'evolution' | 'measurements' | 'evidence';
+type TabName = 'evolution' | 'measurements' | 'dns' | 'paths' | 'raw' | 'evidence';
+
+const FALLBACK_RELATIONSHIP: Relationship = {
+  id: 'redundancy-independence-churn',
+  vertexLabel: 'R-D-C',
+  vertices: ['R', 'D', 'C'],
+  hypothesis: 'Redundancy, diversity and churn relationship',
+};
 
 function useRequest(client: ObservationClient, path?: string) {
   const [state, setState] = React.useState<{ data?: any; error?: string }>({});
@@ -71,8 +78,18 @@ function formatValue(value: any) {
   if (value === null || value === undefined) return '—';
   if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(3);
   if (typeof value === 'string') return value;
-  const text = JSON.stringify(value);
-  return text.length > 120 ? `${text.slice(0, 117)}…` : text;
+  return JSON.stringify(value);
+}
+
+function flattenPayload(value: any, path = ''): Array<{ path: string; value: string }> {
+  if (value === null || value === undefined || typeof value !== 'object')
+    return [{ path: path || '$', value: formatValue(value) }];
+  const entries: Array<[string, any]> = Array.isArray(value)
+    ? value.map((child, index) => [String(index), child])
+    : Object.entries(value);
+  return entries.flatMap(([key, child]) =>
+    flattenPayload(child, path ? `${path}.${key}` : String(key))
+  );
 }
 
 function RelationshipEvolution({
@@ -355,7 +372,10 @@ export default function TradeoffObservatory({
     tab === 'evolution' ? '/api/v1/relationships' : undefined
   );
   const subjects: Subject[] = subjectsState.data?.items || [];
-  const relationships: Relationship[] = relationshipsState.data?.items || [];
+  const advertisedRelationships: Relationship[] = relationshipsState.data?.items || [];
+  const relationships: Relationship[] = advertisedRelationships.length
+    ? advertisedRelationships
+    : [FALLBACK_RELATIONSHIP];
   const [selectedSubject, setSelectedSubject] = React.useState('');
   const [selectedRelationship, setSelectedRelationship] = React.useState('');
   const subject = subjects.some(item => item.name === selectedSubject)
@@ -403,6 +423,54 @@ export default function TradeoffObservatory({
     available: (value.availableSymbols || []).join(', ') || '—',
     missing: (value.missingSymbols || []).join(', ') || '—',
   }));
+  const networkQuality = Array.isArray(snapshot?.networkQuality) ? snapshot.networkQuality : [];
+  const dnsRows = networkQuality.flatMap((source: any) =>
+    [
+      ...(source.dns || []).map((entry: any) => ({ ...entry, kind: 'DNS' })),
+      ...(source.doh || []).map((entry: any) => ({ ...entry, kind: 'DoH' })),
+    ].map((entry: any) => ({
+      source: `${source.sourceNode || subject}/${source.sourcePlane || 'unknown'}`,
+      observedAt: source.observedAt ? new Date(source.observedAt).toLocaleString() : '—',
+      kind: entry.kind,
+      role: entry.serverRole || entry.role || '—',
+      server: entry.server || entry.url || '—',
+      protocol: entry.protocol || (entry.kind === 'DoH' ? 'https' : '—'),
+      name: entry.name || entry.queryName || '—',
+      attempts: entry.attempts ?? '—',
+      successes: entry.successes ?? '—',
+      failureRatio: entry.failureRatio ?? '—',
+      p50Ms: entry.p50Ms ?? '—',
+      p95Ms: entry.p95Ms ?? '—',
+      responses: formatValue(entry.responses),
+      raw: formatValue(entry),
+    }))
+  );
+  const pathRows = networkQuality.flatMap((source: any) =>
+    (source.paths || []).map((entry: any) => ({
+      source: `${source.sourceNode || subject}/${source.sourcePlane || 'unknown'}`,
+      observedAt: source.observedAt ? new Date(source.observedAt).toLocaleString() : '—',
+      target: `${entry.targetNode || '—'}/${entry.targetPlane || '—'}`,
+      address: entry.address || entry.target || '—',
+      attempts: entry.attempts ?? '—',
+      successes: entry.successes ?? '—',
+      lossRatio: entry.lossRatio ?? entry.failureRatio ?? '—',
+      p50Ms: entry.p50Ms ?? '—',
+      p95Ms: entry.p95Ms ?? '—',
+      raw: formatValue(entry),
+    }))
+  );
+  const rawRows = snapshot
+    ? flattenPayload({
+        structural: Object.fromEntries(
+          Object.entries(snapshot).filter(
+            ([key]) => !['apiVersion', 'kind', 'name', 'measurement', 'networkQuality', 'networkStatus'].includes(key)
+          )
+        ),
+        measurement: snapshot.measurement,
+        networkQuality: snapshot.networkQuality,
+        networkStatus: snapshot.networkStatus,
+      })
+    : [];
 
   return (
     <Box>
@@ -451,6 +519,9 @@ export default function TradeoffObservatory({
       >
         <Tab value="evolution" label="Relationship evolution" />
         <Tab value="measurements" label="Measurements" />
+        <Tab value="dns" label="DNS / DoH" />
+        <Tab value="paths" label="Path probes" />
+        <Tab value="raw" label="All agent data" />
         <Tab value="evidence" label="Structural evidence" />
       </Tabs>
       {!subjects.length && !subjectsState.error && (
@@ -481,9 +552,10 @@ export default function TradeoffObservatory({
             </FormControl>
             <RangeSelector value={range} bounds={bounds} onCommit={setRange} />
           </Stack>
-          {!relationships.length && !relationshipsState.error && (
-            <Alert severity="warning">
-              The Advanced Fabric API reports no relationship definitions.
+          {!advertisedRelationships.length && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              Relationship definitions are temporarily unavailable; showing the canonical R-D-C
+              frame while observation data recovers.
             </Alert>
           )}
           {relationship && (
@@ -513,6 +585,69 @@ export default function TradeoffObservatory({
                 { header: 'Observed at', accessorKey: 'observedAt' },
                 { header: 'Source', accessorKey: 'source' },
                 { header: 'Missing evidence / note', accessorKey: 'note' },
+              ] as any
+            }
+          />
+        </SectionBox>
+      )}
+      {tab === 'dns' && snapshot && (
+        <SectionBox title={`${subject} DNS / DoH observations (${dnsRows.length})`}>
+          <Table
+            data={dnsRows}
+            columns={
+              [
+                { header: 'Source', accessorKey: 'source' },
+                { header: 'Observed at', accessorKey: 'observedAt' },
+                { header: 'Kind', accessorKey: 'kind' },
+                { header: 'Role', accessorKey: 'role' },
+                { header: 'Server', accessorKey: 'server' },
+                { header: 'Protocol', accessorKey: 'protocol' },
+                { header: 'Query', accessorKey: 'name' },
+                { header: 'Attempts', accessorKey: 'attempts' },
+                { header: 'Successes', accessorKey: 'successes' },
+                { header: 'Failure ratio', accessorKey: 'failureRatio' },
+                { header: 'p50 ms', accessorKey: 'p50Ms' },
+                { header: 'p95 ms', accessorKey: 'p95Ms' },
+                { header: 'Responses', accessorKey: 'responses' },
+                { header: 'Complete record', accessorKey: 'raw' },
+              ] as any
+            }
+          />
+        </SectionBox>
+      )}
+      {tab === 'paths' && snapshot && (
+        <SectionBox title={`${subject} path probe observations (${pathRows.length})`}>
+          <Table
+            data={pathRows}
+            columns={
+              [
+                { header: 'Source', accessorKey: 'source' },
+                { header: 'Observed at', accessorKey: 'observedAt' },
+                { header: 'Target', accessorKey: 'target' },
+                { header: 'Address', accessorKey: 'address' },
+                { header: 'Attempts', accessorKey: 'attempts' },
+                { header: 'Successes', accessorKey: 'successes' },
+                { header: 'Loss ratio', accessorKey: 'lossRatio' },
+                { header: 'p50 ms', accessorKey: 'p50Ms' },
+                { header: 'p95 ms', accessorKey: 'p95Ms' },
+                { header: 'Complete record', accessorKey: 'raw' },
+              ] as any
+            }
+          />
+        </SectionBox>
+      )}
+      {tab === 'raw' && snapshot && (
+        <SectionBox title={`${subject} complete agent payload (${rawRows.length} fields)`}>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            This view expands every leaf field supplied by structural observation, node measurement,
+            network-quality and node-status collectors. Values are not truncated.
+          </Alert>
+          <Table
+            data={rawRows}
+            columns={
+              [
+                { header: 'Field path', accessorKey: 'path' },
+                { header: 'Value', accessorKey: 'value' },
               ] as any
             }
           />

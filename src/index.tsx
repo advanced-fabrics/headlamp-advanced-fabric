@@ -43,15 +43,40 @@ function Dashboard() {
     if (!serviceRef || !supported) return null;
     const base = serviceProxyBase(serviceRef);
     let pending = Promise.resolve<any>(undefined);
+    const cache = new Map<string, { data: any; storedAt: number }>();
+    const inflight = new Map<string, Promise<any>>();
     return path => {
+      const now = Date.now();
+      const cached = cache.get(path);
+      const ttl = path === '/api/v1/subjects' || path === '/api/v1/relationships' ? 60000 : 10000;
+      if (cached && now - cached.storedAt < ttl) return Promise.resolve(cached.data);
+      const existing = inflight.get(path);
+      if (existing) return existing;
       const run = () =>
         requestObservation(
           observationPath =>
             ApiProxy.request(`${base}${observationPath}`, { method: 'GET', isJSON: false }),
           path
-        );
-      pending = pending.catch(() => undefined).then(run);
-      return pending;
+        )
+          .then(data => {
+            cache.set(path, { data, storedAt: Date.now() });
+            return data;
+          })
+          .catch(error => {
+            // Prefer recently observed evidence to an empty page while the API
+            // server is throttling. Stale data remains explicitly timestamped.
+            const stale = cache.get(path);
+            if (stale && Date.now() - stale.storedAt < 300000) return stale.data;
+            throw error;
+          });
+      const request = pending.catch(() => undefined).then(run);
+      pending = request;
+      inflight.set(path, request);
+      request.then(
+        () => inflight.delete(path),
+        () => inflight.delete(path)
+      );
+      return request;
     };
   }, [serviceRef?.namespace, serviceRef?.name, serviceRef?.port, supported]);
 
