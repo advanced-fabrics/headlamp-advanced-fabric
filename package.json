@@ -1,6 +1,6 @@
 {
   "name": "headlamp-advanced-fabric",
-  "version": "0.25.0",
+  "version": "0.26.0",
   "description": "Read-only Headlamp observability client for Advanced Fabric",
   "scripts": {
     "build": "headlamp-plugin build",
