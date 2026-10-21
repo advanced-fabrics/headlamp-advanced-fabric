@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   completeSamples,
@@ -7,6 +8,14 @@ import {
 } from './contract';
 
 describe('public observation contract', () => {
+  it('keeps time controls independent of the host MUI Slider implementation', () => {
+    const source = readFileSync(new URL('./tradeoff.tsx', import.meta.url), 'utf8');
+    expect(source).not.toContain('<Slider');
+    expect(source).toContain('aria-label="Highlighted observation time"');
+    expect(source).toContain('aria-label="Observation start time"');
+    expect(source).toContain('aria-label="Observation end time"');
+  });
+
   it('discovers the API only through the advertised service reference', () => {
     expect(serviceProxyBase({ namespace: 'fabric-a', name: 'observations', port: 8080 })).toBe(
       '/api/v1/namespaces/fabric-a/services/http:observations:8080/proxy'
